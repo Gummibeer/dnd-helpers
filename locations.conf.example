@@ -1,0 +1,35 @@
+[Hammerhåeim]
+; Mine
+mine.workers = 4
+mine.tools = 1
+mine.rate = 1/4
+;; Coal
+mine.production.coal.fixed = 2d4
+mine.production.coal.min = 1
+mine.production.coal.max = 9
+mine.production.coal.rate = 2d10
+;; Iron
+mine.production.iron.fixed = null
+mine.production.iron.min = 10
+mine.production.iron.max = 16
+mine.production.iron.rate = 2d8
+;; Silver
+mine.production.silver.fixed = null
+mine.production.silver.min = 17
+mine.production.silver.max = 19
+mine.production.silver.rate = 2d6
+;; Mithral
+mine.production.mithral.fixed = null
+mine.production.mithral.min = 20
+mine.production.mithral.max = 20
+mine.production.mithral.rate = 2d4
+
+; Woodcutter
+woodcutter.workers = 1
+woodcutter.tools = 0
+woodcutter.rate = 1/2
+;; Wood
+woodcutter.production.wood.fixed = null
+woodcutter.production.wood.min = 1
+woodcutter.production.wood.max = 20
+woodcutter.production.wood.rate = 2d12
