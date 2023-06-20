@@ -13,9 +13,9 @@ use function Termwind\{render};
 
 class ProduceMaterialsCommand extends Command
 {
-    protected $signature = 'material:produce {location} {--days=1}';
+    protected $signature = 'material:produce {locations?} {--days=1}';
 
-    protected $description = 'Run material procution calculation for the given location.';
+    protected $description = 'Run material procution calculation for any location.';
 
     public function handle(): int
     {
@@ -25,75 +25,68 @@ class ProduceMaterialsCommand extends Command
             scanner_mode: INI_SCANNER_TYPED
         ))->dot()->undot();
 
-        if (! $locations->has($this->argument('location'))) {
-            render(<<<HTML
-            <div class="ml-2">
-                <div class="px-1 bg-red-300 text-black font-bold">Error</div>
-                <span class="ml-1">Use one of the configured locations:</span>
-                <ul class="italic">
-                    <li>{$locations->keys()->implode('</li><li>')}</li>
-                </ul>
-            </div>
-            HTML);
+        $locations
+            ->when(
+                $this->argument('locations'),
+                fn (Collection $c) => $c->intersectByKeys(array_flip(explode(',', $this->argument('locations'))))
+            )
+            ->each(function (array $data, string $location): void {
+                render(<<<HTML
+                <div class="ml-2">
+                    <div class="px-1 bg-blue-300 text-black font-bold">{$location}</div>
+                </div>
+                HTML);
 
-            return self::FAILURE;
-        }
+                collect($data)->each(function (array $config, string $name): void {
+                    $config = new Config($config);
 
-        render(<<<HTML
-        <div class="ml-2">
-            <div class="px-1 bg-blue-300 text-black font-bold">{$this->argument('location')}</div>
-        </div>
-        HTML);
+                    $result = Collection::times($this->option('days'), function () use ($config): Collection {
+                        return Collection::times($this->calculateTimes($config), function () use ($config): Collection {
+                            $random = DiceBag::factory('d20')->getTotal();
 
-        collect($locations->get($this->argument('location')))->each(function (array $config, string $name): void {
-            $config = new Config($config);
+                            return collect($config['production'])
+                                ->map(function (array $material) use ($random) {
+                                    $amount = DiceBag::factory($material['fixed'] ?? '0')->getTotal();
 
-            $result = Collection::times($this->option('days'), function () use ($config): Collection {
-                return Collection::times($this->calculateTimes($config), function () use ($config): Collection {
-                    $random = DiceBag::factory('d20')->getTotal();
+                                    if ($material['min'] <= $random && $random <= $material['max']) {
+                                        $amount += max(0, \App\DiceBag::roll($material['rate'] ?? '0'));
+                                    }
 
-                    return collect($config['production'])
-                        ->map(function (array $material) use ($random) {
-                            $amount = DiceBag::factory($material['fixed'] ?? '0')->getTotal();
-
-                            if($material['min'] <= $random && $random <= $material['max']) {
-                                $amount += DiceBag::factory($material['rate'] ?? '0')->getTotal();
-                            }
-
-                            return $amount;
+                                    return $amount;
+                                });
                         });
+                    })->collapse();
+
+                    $production = collect(array_flip(array_keys($config['production'])))
+                        ->map(fn ($_, string $material) => $result->sum($material));
+
+                    $tbody = $production
+                        ->keyBy(fn (int $amount, string $material) => Str::headline($material))
+                        ->map(fn (int $amount, string $material) => <<<HTML
+                        <tr>
+                            <td>{$material}</td>
+                            <td>{$amount}</td>
+                        </tr>
+                        HTML)
+                        ->implode(PHP_EOL);
+
+                    render(<<<HTML
+                    <div class="ml-4">
+                        <div class="px-1 bg-yellow-300 text-black font-bold capitalize">{$name}</div>
+                        <span class="ml-2">{$this->option('days')} days</span>
+                        <table>
+                        <thead>
+                        <tr>
+                            <th>Material</th>
+                            <th>Amount</th>
+                        </tr>
+                        </thead>
+                        <tbody>{$tbody}</tbody>
+                        </table>
+                    </div>
+                    HTML);
                 });
-            })->collapse();
-
-            $production = collect(array_flip(array_keys($config['production'])))
-                ->map(fn ($_, string $material) => $result->sum($material));
-
-            $tbody = $production
-                ->keyBy(fn(int $amount, string $material) => Str::headline($material))
-                ->map(fn(int $amount, string $material) => <<<HTML
-                <tr>
-                    <td>{$material}</td>
-                    <td>{$amount}</td>
-                </tr>
-                HTML)
-                ->implode(PHP_EOL);
-
-            render(<<<HTML
-            <div class="ml-4">
-                <div class="px-1 bg-yellow-300 text-black font-bold capitalize">{$name}</div>
-                <span class="ml-2">{$this->option('days')} days</span>
-                <table>
-                <thead>
-                <tr>
-                    <th>Material</th>
-                    <th>Amount</th>
-                </tr>
-                </thead>
-                <tbody>{$tbody}</tbody>
-                </table>
-            </div>
-            HTML);
-        });
+            });
 
         return self::SUCCESS;
     }
